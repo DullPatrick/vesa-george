@@ -17,10 +17,10 @@
         .hero { text-align: center; padding: 3rem 1rem; background: linear-gradient(135deg, #f5e7d9, #fff6ed); border-radius: 40px; }
         .hero h1 { font-size: 3.2rem; color: #6b4e3a; }
         .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
-        .gallery-item { background: white; border-radius: 16px; overflow: hidden; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: transform 0.2s; }
+        .gallery-item { background: white; border-radius: 16px; overflow: hidden; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: transform 0.2s; position: relative; }
         .gallery-item:hover { transform: translateY(-5px); }
         .gallery-item img, .gallery-item video { width: 100%; aspect-ratio: 1/1; object-fit: cover; display: block; }
-        .video-indicator { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; }
+        .video-indicator { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; z-index: 2; }
         .upload-area { background: #faf0e8; border-radius: 32px; padding: 1.5rem; margin-bottom: 2rem; text-align: center; }
         .upload-form { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; align-items: center; }
         .upload-form input, .upload-form button { padding: 8px 20px; border-radius: 40px; border: none; }
@@ -30,13 +30,13 @@
         .lightbox.active { display: flex; }
         .lightbox-content { max-width: 90%; max-height: 80%; background: #000; border-radius: 12px; overflow: hidden; }
         .lightbox img, .lightbox video { max-width: 100%; max-height: 70vh; display: block; margin: 0 auto; }
-        .close { position: absolute; top: 25px; right: 35px; font-size: 40px; color: white; cursor: pointer; }
+        .close { position: absolute; top: 25px; right: 35px; font-size: 40px; color: white; cursor: pointer; z-index: 1001; }
         .caption-lb { position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; color: white; background: rgba(0,0,0,0.6); padding: 8px; }
         .timeline { padding-left: 2rem; position: relative; }
         .timeline::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #d9c7b2; }
         .timeline-item { margin-bottom: 1.8rem; }
         .timeline-item .year { background: #fef3e8; display: inline-block; padding: 0.2rem 1rem; border-radius: 30px; color: #b47c4a; font-weight: bold; }
-        #map { height: 350px; border-radius: 20px; }
+        #map { height: 350px; border-radius: 20px; z-index: 1; }
         .quote-block { text-align: center; font-style: italic; background: #fef3e8; padding: 2rem; border-radius: 40px; }
         .guestbook-form { display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 2rem; }
         .guestbook-form input, .guestbook-form textarea { padding: 12px; border-radius: 40px; border: 1px solid #e2cfbc; }
@@ -144,6 +144,24 @@
     const IMGBB_API_KEY = "e8ade6910dc9f1e6fa80d5c21f5d098a";
 
     let uploadedImages = [];
+    
+    // ========== ÎNLOCUIEȘTE ACESTE LISTE CU NUMELE EXACTE ALE FIȘIERELOR TALE ==========
+    // Exemplu: "images/1.jpg", "images/poza-mea.png", etc.
+    const staticImagesList = [
+        "images/1.jpg",
+        "images/2.jpg",
+        "images/3.jpg",
+        "images/4.jpg",
+        "images/5.jpg"
+    ];
+    
+    // Exemplu: "videos/filmare.mp4", "videos/clip.MP4", etc.
+    const staticVideosList = [
+        "videos/10.mp4",
+        "videos/2.mp4"
+    ];
+    // ====================================================================================
+
     function loadUploads() {
         const stored = localStorage.getItem('memorial_uploaded_images');
         if (stored) uploadedImages = JSON.parse(stored);
@@ -190,49 +208,40 @@
         }
     }
 
-    // ÎNCERCĂM AUTOMAT EXTENSIILE .jpg și .JPG
-    const photoNumbers = [1, 2, 3, 4, 5];
-    const staticPhotos = [];
-    
-    for (let i of photoNumbers) {
-        staticPhotos.push(`images/${i}.jpg`);
-        staticPhotos.push(`images/${i}.JPG`);
-    }
-
-    const staticVideos = ["videos/10.mp4", "videos/2.mp4", "videos/10.MP4", "videos/2.MP4"];
-
     function renderPhotoGallery() {
         const grid = document.getElementById('photoGrid');
         grid.innerHTML = '';
-        const allPhotos = [...uploadedImages, ...staticPhotos.map(src => ({ url: src, originalName: 'Amintire' }))];
-        const uniquePhotos = [];
-        const seen = new Set();
-        for (let photo of allPhotos) {
-            if (!seen.has(photo.url)) {
-                seen.add(photo.url);
-                uniquePhotos.push(photo);
-            }
+        
+        const allPhotos = [...uploadedImages, ...staticImagesList.map(src => ({ url: src, originalName: 'Amintire' }))];
+        
+        if (allPhotos.length === 0) {
+            grid.innerHTML = '<p style="text-align:center;">Nu există fotografii momentan.<br>📸 Adaugă poze folosind butonul de mai sus.</p>';
+            return;
         }
-        uniquePhotos.forEach(item => {
+        
+        allPhotos.forEach(item => {
             const div = document.createElement('div');
             div.className = 'gallery-item';
             const img = document.createElement('img');
             img.src = item.url;
-            img.onerror = function() { this.style.display = 'none'; };
             img.alt = "Foto";
             img.loading = "lazy";
             div.appendChild(img);
             div.onclick = () => openMedia({ type: 'image', src: item.url, caption: item.originalName !== 'Amintire' ? `Încărcată de vizitator: ${item.originalName}` : 'Amintire din album' });
             grid.appendChild(div);
         });
-        if (grid.children.length === 0) grid.innerHTML = '<p>Nu există fotografii momentan.</p>';
     }
 
     function renderVideoGallery() {
         const grid = document.getElementById('videoGrid');
         grid.innerHTML = '';
-        const uniqueVideos = [...new Set(staticVideos)];
-        uniqueVideos.forEach(src => {
+        
+        if (staticVideosList.length === 0) {
+            grid.innerHTML = '<p style="text-align:center;">Nu există filmări în arhivă momentan.</p>';
+            return;
+        }
+        
+        staticVideosList.forEach(src => {
             const div = document.createElement('div');
             div.className = 'gallery-item';
             const video = document.createElement('video');
@@ -252,7 +261,6 @@
             div.onclick = (e) => { e.stopPropagation(); openMedia({ type: 'video', src: src, caption: 'Videoclip din arhivă' }); };
             grid.appendChild(div);
         });
-        if (grid.children.length === 0) grid.innerHTML = '<p>Nu există filmări.</p>';
     }
 
     function openMedia(item) {
@@ -273,6 +281,7 @@
         }
         lb.classList.add('active');
     }
+    
     function closeLightbox() {
         const lb = document.getElementById('lightbox');
         const content = document.getElementById('lightboxContent');
@@ -363,6 +372,7 @@
         renderVideoGallery();
         rotateQuote();
         setInterval(rotateQuote, 8000);
+        
         document.getElementById('submitPublicMessage').onclick = () => { const n=document.getElementById('guestName').value, m=document.getElementById('guestMessage').value; if(n&&m) { addPublicMessage(n,m); document.getElementById('guestName').value=''; document.getElementById('guestMessage').value=''; } else alert('Completează numele și mesajul.'); };
         document.getElementById('accessPrivateBtn').onclick = accessPrivateMessages;
         document.getElementById('submitPrivateMessage').onclick = () => { const n=document.getElementById('privateName').value, m=document.getElementById('privateMessage').value; if(m.trim()) { addPrivateMessage(n,m); document.getElementById('privateName').value=''; document.getElementById('privateMessage').value=''; } else alert('Scrie un mesaj.'); };
