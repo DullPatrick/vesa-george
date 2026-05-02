@@ -78,7 +78,7 @@
     <section id="video-gallery">
         <h2><i class="fas fa-video"></i> Filmări video (arhivă)</h2>
         <div class="gallery-grid" id="videoGrid"></div>
-        <p style="margin-top:1rem; font-size:0.85rem;">🎬 Vizitează această pagină pentru a viziona filmările existente.</p>
+        <p style="margin-top:1rem; font-size:0.85rem;">🎬 Apasă pe o filmare pentru a o viziona.</p>
     </section>
 
     <section id="timeline">
@@ -145,8 +145,6 @@
 
     let uploadedImages = [];
     
-    // ========== ÎNLOCUIEȘTE ACESTE LISTE CU NUMELE EXACTE ALE FIȘIERELOR TALE ==========
-    // Exemplu: "images/1.jpg", "images/poza-mea.png", etc.
     const staticImagesList = [
         "images/10.JPG",
         "images/4.JPG",
@@ -155,12 +153,10 @@
         "images/5.JPG"
     ];
     
-    // Exemplu: "videos/filmare.mp4", "videos/clip.MP4", etc.
+    // MODIFICAT: doar fișiere MP4 (eliminat .MOV)
     const staticVideosList = [
-        "videos/1.MP4",
-        "videos/2.MOV"
+        "videos/1.MP4"
     ];
-    // ====================================================================================
 
     function loadUploads() {
         const stored = localStorage.getItem('memorial_uploaded_images');
@@ -277,6 +273,7 @@
             const video = document.createElement('video');
             video.src = item.src;
             video.controls = true;
+            video.autoplay = false;
             content.appendChild(video);
         }
         lb.classList.add('active');
