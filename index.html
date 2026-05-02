@@ -8,6 +8,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #fef9f0; color: #2e2e2e; font-family: 'Open Sans', sans-serif; line-height: 1.6; }
@@ -97,6 +100,7 @@
         <div class="quote-block" id="quoteDisplay"></div>
     </section>
 
+    <!-- CARTE DE CONDOLEANȚE PUBLICĂ (cu Firebase) -->
     <section>
         <h2><i class="fas fa-book-open"></i> Carte de condoleanțe (publică)</h2>
         <div class="guestbook-form">
@@ -105,21 +109,24 @@
             <button id="submitPublicMessage">Trimite mesaj</button>
         </div>
         <div class="messages-list" id="publicMessagesList"></div>
+        <p style="font-size:0.8rem; margin-top:10px;">✨ Mesajele sunt vizibile pentru toți vizitatorii (stocate în cloud).</p>
     </section>
 
+    <!-- JURNAL PRIVAT (cu Firebase, bazat pe cheie) -->
     <section>
         <h2><i class="fas fa-lock"></i> Jurnal privat</h2>
         <div class="private-key-area">
-            <input type="text" id="privateKey" placeholder="Cheia ta secretă">
+            <input type="text" id="privateKey" placeholder="Cheia ta secretă (ex. un nume, o dată)">
             <button id="accessPrivateBtn">Accesează / Creează spațiu privat</button>
         </div>
         <div id="privateSection" style="display: none;">
             <div class="guestbook-form">
                 <input type="text" id="privateName" placeholder="Numele tău (opțional)">
-                <textarea id="privateMessage" rows="3" placeholder="Scrie aici..."></textarea>
+                <textarea id="privateMessage" rows="3" placeholder="Scrie aici un gând personal..."></textarea>
                 <button id="submitPrivateMessage">Trimite mesaj privat</button>
             </div>
             <div class="messages-list" id="privateMessagesList"></div>
+            <p style="font-size:0.8rem; margin-top:10px;">🔒 Aceste mesaje sunt vizibile doar pentru cine cunoaște cheia secretă.</p>
         </div>
     </section>
 
@@ -141,8 +148,26 @@
 </div>
 
 <script>
-    const IMGBB_API_KEY = "e8ade6910dc9f1e6fa80d5c21f5d098a";
+    // ==================== CONFIGURAȚIE FIREBASE ====================
+    const firebaseConfig = {
+        apiKey: "AIzaSyDM-BDxHeALB55pKB0GBjhXCN2t2Etw5-8",
+        authDomain: "vesa-george.firebaseapp.com",
+        databaseURL: "https://vesa-george-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "vesa-george",
+        storageBucket: "vesa-george.firebasestorage.app",
+        messagingSenderId: "1019155331892",
+        appId: "1:1019155331892:web:d45cdd3acd4b90f2848361"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+    const publicMessagesRef = database.ref('publicMessages');
+    // ================================================================
 
+    // ==================== CONFIGURAȚIE IMGBB ====================
+    const IMGBB_API_KEY = "e8ade6910dc9f1e6fa80d5c21f5d098a";
+    // ============================================================
+
+    // ========== STOCARE UPLOADURI ÎN localStorage ==========
     let uploadedImages = [];
     
     const staticImagesList = [
@@ -153,7 +178,6 @@
         "images/5.JPG"
     ];
     
-    // MODIFICAT: doar fișiere MP4 (eliminat .MOV)
     const staticVideosList = [
         "videos/1.MP4"
     ];
@@ -207,14 +231,11 @@
     function renderPhotoGallery() {
         const grid = document.getElementById('photoGrid');
         grid.innerHTML = '';
-        
         const allPhotos = [...uploadedImages, ...staticImagesList.map(src => ({ url: src, originalName: 'Amintire' }))];
-        
         if (allPhotos.length === 0) {
             grid.innerHTML = '<p style="text-align:center;">Nu există fotografii momentan.<br>📸 Adaugă poze folosind butonul de mai sus.</p>';
             return;
         }
-        
         allPhotos.forEach(item => {
             const div = document.createElement('div');
             div.className = 'gallery-item';
@@ -231,12 +252,10 @@
     function renderVideoGallery() {
         const grid = document.getElementById('videoGrid');
         grid.innerHTML = '';
-        
         if (staticVideosList.length === 0) {
             grid.innerHTML = '<p style="text-align:center;">Nu există filmări în arhivă momentan.</p>';
             return;
         }
-        
         staticVideosList.forEach(src => {
             const div = document.createElement('div');
             div.className = 'gallery-item';
@@ -273,7 +292,6 @@
             const video = document.createElement('video');
             video.src = item.src;
             video.controls = true;
-            video.autoplay = false;
             content.appendChild(video);
         }
         lb.classList.add('active');
@@ -288,39 +306,91 @@
         content.innerHTML = '';
     }
 
-    let publicMessages = [];
-    function loadPublicMessages() { const stored = localStorage.getItem('memorial_public_messages'); if(stored) publicMessages = JSON.parse(stored); renderPublicMessages(); }
-    function savePublicMessages() { localStorage.setItem('memorial_public_messages', JSON.stringify(publicMessages)); }
-    function renderPublicMessages() { 
+    // ========== MESAJE PUBLICE CU FIREBASE ==========
+    function renderPublicMessages(messagesArray) {
         const container = document.getElementById('publicMessagesList');
-        if (!publicMessages.length) { container.innerHTML = '<p>Fii primul care lasă un mesaj...</p>'; return; }
+        if (!messagesArray) {
+            container.innerHTML = '<p style="text-align:center;">Fii primul care lasă un mesaj...</p>';
+            return;
+        }
+        const sorted = Object.values(messagesArray).sort((a, b) => b.timestamp - a.timestamp);
         container.innerHTML = '';
-        publicMessages.sort((a,b)=>b.timestamp-a.timestamp).forEach(msg => {
+        sorted.forEach(msg => {
             const div = document.createElement('div');
             div.className = 'message-card';
             div.innerHTML = `<div><span class="message-name">${escapeHtml(msg.name)}</span><span class="message-date">${new Date(msg.timestamp).toLocaleString()}</span></div><div class="message-text">${escapeHtml(msg.text)}</div>`;
             container.appendChild(div);
         });
     }
-    function addPublicMessage(name, text) { if(name.trim() && text.trim()) { publicMessages.push({ name: name.trim(), text: text.trim(), timestamp: Date.now() }); savePublicMessages(); renderPublicMessages(); } }
 
-    let currentPrivateKey = null, privateMessages = [];
-    function loadPrivateMessages(key) { const stored = localStorage.getItem(`memorial_private_${key}`); privateMessages = stored ? JSON.parse(stored) : []; renderPrivateMessages(); }
-    function savePrivateMessages(key) { localStorage.setItem(`memorial_private_${key}`, JSON.stringify(privateMessages)); }
-    function renderPrivateMessages() { 
+    function loadPublicMessages() {
+        publicMessagesRef.on('value', (snapshot) => {
+            renderPublicMessages(snapshot.val());
+        });
+    }
+
+    function addPublicMessage(name, text) {
+        if (!name.trim() || !text.trim()) return;
+        publicMessagesRef.push({
+            name: name.trim(),
+            text: text.trim(),
+            timestamp: Date.now()
+        }).catch(err => alert("Eroare: " + err));
+    }
+
+    // ========== MESAJE PRIVATE CU FIREBASE ==========
+    let currentPrivateRef = null;
+    let privateListener = null;
+
+    async function hashKey(key) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(key);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function accessPrivateMessages() {
+        const keyInput = document.getElementById('privateKey');
+        const key = keyInput.value.trim();
+        if (!key) { alert("Te rog să introduci o cheie secretă."); return; }
+        localStorage.setItem('memorial_private_key', key);
+        const hashed = await hashKey(key);
+        currentPrivateRef = database.ref(`privateMessages/${hashed}`);
+        if (privateListener) currentPrivateRef.off('value', privateListener);
+        privateListener = (snapshot) => renderPrivateMessages(snapshot.val());
+        currentPrivateRef.on('value', privateListener);
+        document.getElementById('privateSection').style.display = 'block';
+        keyInput.disabled = true;
+    }
+
+    function renderPrivateMessages(messagesData) {
         const container = document.getElementById('privateMessagesList');
-        if (!privateMessages.length) { container.innerHTML = '<p>Nu ai niciun mesaj privat încă.</p>'; return; }
+        if (!messagesData) {
+            container.innerHTML = '<p style="text-align:center;">Nu ai niciun mesaj privat încă. Scrie primul!</p>';
+            return;
+        }
         container.innerHTML = '';
-        privateMessages.sort((a,b)=>b.timestamp-a.timestamp).forEach(msg => {
+        const sorted = Object.values(messagesData).sort((a, b) => b.timestamp - a.timestamp);
+        sorted.forEach(msg => {
             const div = document.createElement('div');
             div.className = 'message-card';
             div.innerHTML = `<div><span class="message-name">${escapeHtml(msg.name || 'Anonim')}</span><span class="message-date">${new Date(msg.timestamp).toLocaleString()}</span></div><div class="message-text">${escapeHtml(msg.text)}</div>`;
             container.appendChild(div);
         });
     }
-    function addPrivateMessage(name, text) { if(text.trim()) { privateMessages.push({ name: name.trim() || 'Anonim', text: text.trim(), timestamp: Date.now() }); savePrivateMessages(currentPrivateKey); renderPrivateMessages(); } }
-    function accessPrivateMessages() { const key = document.getElementById('privateKey').value.trim(); if(!key) { alert('Introdu cheia secretă'); return; } currentPrivateKey = key; loadPrivateMessages(currentPrivateKey); document.getElementById('privateSection').style.display = 'block'; document.getElementById('privateKey').disabled = true; }
 
+    async function addPrivateMessage(name, text) {
+        if (!currentPrivateRef) { alert("Accesează mai întâi spațiul privat."); return; }
+        if (!text.trim()) return;
+        currentPrivateRef.push({
+            name: name.trim() || "Anonim",
+            text: text.trim(),
+            timestamp: Date.now()
+        }).catch(err => alert("Eroare: " + err));
+    }
+
+    // ========== CRONOLOGIE / CITATE / LUMÂNARE ==========
     const timelineData = [
         { year:"1997", desc:"S-a nascut luni seara la ora 20:30" }, { year:"2004", desc:"A inceput clasa I la Scoala Generala Chesa" },
         { year:"2008", desc:"Incepe clasa a V-a la Cociuba Mare" }, { year:"2012", desc:"Inceperea liceului la Nicola Jiga - Tinca" },
