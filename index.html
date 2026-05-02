@@ -109,7 +109,7 @@
             <button id="submitPublicMessage">Trimite mesaj</button>
         </div>
         <div class="messages-list" id="publicMessagesList"></div>
-        <p style="font-size:0.8rem; margin-top:10px;">✨ Mesajele sunt vizibile pentru toți vizitatorii (stocate în cloud).</p>
+        <p style="font-size:0.8rem; margin-top:10px;">✨ Mesajele sunt vizibile pentru toți vizitatorii.</p>
     </section>
 
     <!-- JURNAL PRIVAT (cu Firebase, bazat pe cheie) -->
@@ -130,12 +130,14 @@
         </div>
     </section>
 
+    <!-- LUMÂNARE VIRTUALĂ (acum în Firebase) -->
     <section>
         <h2><i class="fas fa-candle"></i> Aprinde o lumânare</h2>
         <div class="candle-area">
             <button class="candle-btn" id="candleBtn">🕯️ Aprinde</button>
             <div class="candle-count">Lumânări aprinse: <span id="candleCount">0</span></div>
         </div>
+        <p style="font-size:0.8rem; margin-top:8px;">🕯️ Numărul lumânărilor este comun pentru toți vizitatorii.</p>
     </section>
 
     <footer><i class="fas fa-heart"></i> În veșnică amintire</footer>
@@ -161,6 +163,7 @@
     firebase.initializeApp(firebaseConfig);
     const database = firebase.database();
     const publicMessagesRef = database.ref('publicMessages');
+    const candleRef = database.ref('candleCount');
     // ================================================================
 
     // ==================== CONFIGURAȚIE IMGBB ====================
@@ -390,7 +393,36 @@
         }).catch(err => alert("Eroare: " + err));
     }
 
-    // ========== CRONOLOGIE / CITATE / LUMÂNARE ==========
+    // ========== LUMÂNĂRI ÎN FIREBASE ==========
+    let candleCount = 0;
+    
+    function loadCandle() {
+        candleRef.on('value', (snapshot) => {
+            const val = snapshot.val();
+            if (val !== null) {
+                candleCount = val;
+            } else {
+                // Dacă nu există, inițializăm la 0
+                candleRef.set(0);
+                candleCount = 0;
+            }
+            document.getElementById('candleCount').innerText = candleCount;
+        });
+    }
+    
+    function lightCandle() {
+        // Crește valoarea în Firebase
+        candleRef.transaction((currentValue) => {
+            return (currentValue || 0) + 1;
+        }).catch(err => alert("Eroare la aprindere: " + err));
+        
+        // Animație buton
+        const btn = document.getElementById('candleBtn');
+        btn.style.transform = 'scale(0.95)';
+        setTimeout(() => btn.style.transform = '', 150);
+    }
+
+    // ========== CRONOLOGIE / CITATE ==========
     const timelineData = [
         { year:"1997", desc:"S-a nascut luni seara la ora 20:30" }, { year:"2004", desc:"A inceput clasa I la Scoala Generala Chesa" },
         { year:"2008", desc:"Incepe clasa a V-a la Cociuba Mare" }, { year:"2012", desc:"Inceperea liceului la Nicola Jiga - Tinca" },
@@ -401,8 +433,6 @@
     function buildTimeline() { const container = document.getElementById('timelineContainer'); container.innerHTML = ''; timelineData.forEach(t => { const div = document.createElement('div'); div.className = 'timeline-item'; div.innerHTML = `<div class="year">${t.year}</div><p>${t.desc}</p>`; container.appendChild(div); }); }
     const quotesList = ["„Ceea ce rămâne după noi nu este ceea ce am adunat, ci ceea ce am dăruit.”","„Prietenia nu se stinge niciodată, doar se transformă în stele.”","„Un om ca tine nu moare niciodată cu adevărat atâta timp cât este iubit.”","„Sa nu iti para rau ca s-a terminat, sa iti para bine ca s-a intamplat.”"];
     let quoteIdx=0; function rotateQuote() { document.getElementById('quoteDisplay').innerText = quotesList[quoteIdx]; quoteIdx = (quoteIdx+1)%quotesList.length; }
-    let candleCount = 0; function loadCandle() { const stored = localStorage.getItem('memorial_candle_count'); if(stored) candleCount = parseInt(stored); document.getElementById('candleCount').innerText = candleCount; } 
-    function lightCandle() { candleCount++; document.getElementById('candleCount').innerText = candleCount; localStorage.setItem('memorial_candle_count', candleCount); }
     function escapeHtml(s) { return s.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'); }
 
     let map;
@@ -434,7 +464,7 @@
         buildTimeline();
         initMap();
         loadPublicMessages();
-        loadCandle();
+        loadCandle();  // Acum încarcă din Firebase
         renderPhotoGallery();
         renderVideoGallery();
         rotateQuote();
