@@ -190,17 +190,38 @@
         }
     }
 
-    const staticPhotos = ["images/1.jpg","images/2.jpg","images/3.jpg","images/4.jpg","images/5.jpg"];
-    const staticVideos = ["videos/10.mp4", "videos/2.mp4"];   // ← doar cele două
+    // ÎNCERCĂM AUTOMAT EXTENSIILE .jpg și .JPG
+    const photoNumbers = [1, 2, 3, 4, 5];
+    const staticPhotos = [];
+    
+    for (let i of photoNumbers) {
+        staticPhotos.push(`images/${i}.jpg`);
+        staticPhotos.push(`images/${i}.JPG`);
+    }
+
+    const staticVideos = ["videos/10.mp4", "videos/2.mp4", "videos/10.MP4", "videos/2.MP4"];
 
     function renderPhotoGallery() {
         const grid = document.getElementById('photoGrid');
         grid.innerHTML = '';
         const allPhotos = [...uploadedImages, ...staticPhotos.map(src => ({ url: src, originalName: 'Amintire' }))];
-        allPhotos.forEach(item => {
+        const uniquePhotos = [];
+        const seen = new Set();
+        for (let photo of allPhotos) {
+            if (!seen.has(photo.url)) {
+                seen.add(photo.url);
+                uniquePhotos.push(photo);
+            }
+        }
+        uniquePhotos.forEach(item => {
             const div = document.createElement('div');
             div.className = 'gallery-item';
-            div.innerHTML = `<img src="${item.url}" alt="Foto" loading="lazy">`;
+            const img = document.createElement('img');
+            img.src = item.url;
+            img.onerror = function() { this.style.display = 'none'; };
+            img.alt = "Foto";
+            img.loading = "lazy";
+            div.appendChild(img);
             div.onclick = () => openMedia({ type: 'image', src: item.url, caption: item.originalName !== 'Amintire' ? `Încărcată de vizitator: ${item.originalName}` : 'Amintire din album' });
             grid.appendChild(div);
         });
@@ -210,7 +231,8 @@
     function renderVideoGallery() {
         const grid = document.getElementById('videoGrid');
         grid.innerHTML = '';
-        staticVideos.forEach(src => {
+        const uniqueVideos = [...new Set(staticVideos)];
+        uniqueVideos.forEach(src => {
             const div = document.createElement('div');
             div.className = 'gallery-item';
             const video = document.createElement('video');
