@@ -49,10 +49,13 @@
         .private-key-area { background: #f5ede4; padding: 1rem; border-radius: 24px; display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between; }
         .private-key-area input { padding: 8px 16px; border-radius: 40px; border: 1px solid #e2cfbc; flex: 1; min-width: 180px; }
         .private-key-area button { background: #b47c4a; color: white; border: none; padding: 8px 20px; border-radius: 40px; cursor: pointer; }
+        .private-key-area button.logout-btn { background: #d9534f; margin-left: 10px; }
         .candle-area { text-align: center; background: #faf0e6; padding: 2rem; border-radius: 48px; }
         .candle-btn { background: #f5d742; font-size: 2rem; padding: 12px 24px; border-radius: 60px; cursor: pointer; border: none; }
         .badge-new { display: inline-block; background: #b47c4a; color: white; font-size: 0.7rem; padding: 2px 8px; border-radius: 20px; margin-left: 6px; vertical-align: middle; }
         footer { text-align: center; padding: 2rem; color: #9b7b64; border-top: 1px solid #e6d5c0; }
+        .help-text { font-size: 0.8rem; color: #9b7b64; margin-top: 0.5rem; width: 100%; }
+        .private-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
         @media (max-width: 680px) { .container { padding: 1rem; } .hero h1 { font-size: 2rem; } }
     </style>
 </head>
@@ -116,14 +119,19 @@
     <section>
         <h2><i class="fas fa-lock"></i> Jurnal privat</h2>
         <div class="private-key-area">
-            <input type="text" id="privateKey" placeholder="Cheia ta secretă">
-            <button id="accessPrivateBtn">Accesează / Creează spațiu privat</button>
+            <input type="text" id="privateKey" placeholder="Cheia ta secretă (ex: nume comun, dată specială)">
+            <button id="accessPrivateBtn">🔐 Accesează / Creează spațiu privat</button>
         </div>
+        <div class="help-text">💡 <strong>Important:</strong> Folosește aceeași cheie pentru a vedea TOATE mesajele din conversația voastră privată. Cheia poate fi orice text (ex: "Maria2024", "prieteni123").</div>
         <div id="privateSection" style="display: none;">
+            <div class="private-header">
+                <h3><i class="fas fa-comments"></i> Conversație privată</h3>
+                <button id="logoutPrivateBtn" class="logout-btn" style="background: #d9534f; color: white; border: none; padding: 5px 12px; border-radius: 20px; cursor: pointer;">🚪 Închide sesiunea</button>
+            </div>
             <div class="guestbook-form" style="margin-top:1rem;">
                 <input type="text" id="privateName" placeholder="Numele tău (opțional)">
-                <textarea id="privateMessage" rows="3" placeholder="Scrie aici..."></textarea>
-                <button id="submitPrivateMessage">Trimite mesaj privat</button>
+                <textarea id="privateMessage" rows="3" placeholder="Scrie mesajul tău privat..."></textarea>
+                <button id="submitPrivateMessage">📤 Trimite mesaj privat</button>
             </div>
             <div class="messages-list" id="privateMessagesList"></div>
         </div>
@@ -146,7 +154,7 @@
     <div id="lightboxCaption" class="caption-lb"></div>
 </div>
 
-<!-- Firebase ca scripturi normale (compat) - fara type=module, fara conflicte -->
+<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
@@ -308,36 +316,106 @@
         });
     }
 
-    // ── MESAJE PRIVATE ────────────────────────────────────────────────
+    // ── MESAJE PRIVATE (MODIFICAT COMPLET) ─────────────────────────────
+    let currentPrivateKey = null;
+    let privateUnsubscribe = null;
+
+    // Funcție pentru a încărca TOATE mesajele existente cu cheia respectivă
+    async function loadAllPrivateMessages(key) {
+        try {
+            const snapshot = await db.collection('private_messages')
+                .where('key', '==', key)
+                .orderBy('timestamp', 'asc')  // ordine cronologică
+                .get();
+            
+            const messages = snapshot.docs.map(doc => doc.data());
+            renderPrivateMessages(messages);
+            return messages;
+        } catch (error) {
+            console.error('Eroare la încărcarea mesajelor private:', error);
+            document.getElementById('privateMessagesList').innerHTML = '<p>❌ Eroare la încărcarea mesajelor.</p>';
+            return [];
+        }
+    }
+
     function renderPrivateMessages(msgs) {
         const container = document.getElementById('privateMessagesList');
-        if (!msgs.length) { container.innerHTML = '<p>Nu ai niciun mesaj privat încă.</p>'; return; }
+        if (!msgs || msgs.length === 0) { 
+            container.innerHTML = '<p>📭 Nu există mesaje în această conversație încă. Scrie primul mesaj!</p>'; 
+            return; 
+        }
         container.innerHTML = '';
+        // Afișăm în ordine cronologică (cel mai vechi sus, cel mai nou jos)
         msgs.forEach(function(msg) {
             const div = document.createElement('div');
             div.className = 'message-card';
             const date = msg.timestamp && msg.timestamp.toDate ? msg.timestamp.toDate().toLocaleString('ro-RO') : '';
-            div.innerHTML = '<div><span class="message-name">' + escapeHtml(msg.name || 'Anonim') + '</span><span class="message-date">' + date + '</span></div><div class="message-text">' + escapeHtml(msg.text) + '</div>';
+            const nameDisplay = (msg.name && msg.name !== 'Anonim') ? escapeHtml(msg.name) : '📝 Anonim';
+            div.innerHTML = '<div><span class="message-name">' + nameDisplay + '</span><span class="message-date">' + date + '</span></div><div class="message-text">' + escapeHtml(msg.text) + '</div>';
             container.appendChild(div);
         });
+        
+        // Scroll automat la ultimul mesaj
+        setTimeout(function() {
+            const lastMessage = container.lastChild;
+            if (lastMessage) {
+                lastMessage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }, 100);
     }
-
-    let currentPrivateKey = null;
-    let privateUnsubscribe = null;
 
     function accessPrivateMessages() {
         const key = document.getElementById('privateKey').value.trim();
-        if (!key) { alert('Introdu cheia secretă'); return; }
+        if (!key) { 
+            alert('🔑 Te rugăm să introduci o cheie secretă (poate fi orice text, ex: "Maria2024")'); 
+            return; 
+        }
+        
         currentPrivateKey = key;
         document.getElementById('privateSection').style.display = 'block';
         document.getElementById('privateKey').disabled = true;
-        if (privateUnsubscribe) privateUnsubscribe();
+        
+        // Schimbăm textul butonului
+        const accessBtn = document.getElementById('accessPrivateBtn');
+        accessBtn.innerHTML = '✅ Conectat: ' + key.substring(0, 12) + (key.length > 12 ? '...' : '');
+        accessBtn.style.background = '#5cb85c';
+        
+        // ÎNCĂRCĂM TOATE MESAJELE EXISTENTE (inclusiv cele vechi)
+        loadAllPrivateMessages(key);
+        
+        // Setăm listener în timp real pentru mesaje NOI
+        if (privateUnsubscribe) {
+            privateUnsubscribe();
+        }
+        
         privateUnsubscribe = db.collection('private_messages')
             .where('key', '==', key)
             .orderBy('timestamp', 'desc')
             .onSnapshot(function(snap) {
-                renderPrivateMessages(snap.docs.map(function(d) { return d.data(); }));
+                // Când vine un mesaj nou, reîncărcăm toată conversația
+                const messages = snap.docs.map(function(d) { return d.data(); });
+                // Le afișăm în ordine cronologică
+                messages.reverse(); // inversăm pentru ordine cronologică
+                renderPrivateMessages(messages);
             });
+    }
+
+    function logoutPrivate() {
+        if (privateUnsubscribe) {
+            privateUnsubscribe();
+            privateUnsubscribe = null;
+        }
+        currentPrivateKey = null;
+        document.getElementById('privateSection').style.display = 'none';
+        document.getElementById('privateKey').disabled = false;
+        document.getElementById('privateKey').value = '';
+        document.getElementById('privateMessagesList').innerHTML = '';
+        document.getElementById('privateName').value = '';
+        document.getElementById('privateMessage').value = '';
+        
+        const accessBtn = document.getElementById('accessPrivateBtn');
+        accessBtn.innerHTML = '🔐 Accesează / Creează spațiu privat';
+        accessBtn.style.background = '#b47c4a';
     }
 
     // ── LUMÂNĂRI ──────────────────────────────────────────────────────
@@ -392,7 +470,7 @@
         quoteIdx = (quoteIdx + 1) % quotesList.length;
     }
 
-    // ── HARTĂ - rulează după ce Leaflet e încărcat ────────────────────
+    // ── HARTĂ ─────────────────────────────────────────────────────────
     function initMap() {
         var myMap = L.map('map').setView([46.0, 25.0], 7);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
@@ -465,17 +543,41 @@
         };
 
         document.getElementById('accessPrivateBtn').onclick = accessPrivateMessages;
+        
+        // Buton de deconectare privat
+        document.getElementById('logoutPrivateBtn').onclick = logoutPrivate;
 
         document.getElementById('submitPrivateMessage').onclick = async function() {
             var n = document.getElementById('privateName').value.trim();
             var m = document.getElementById('privateMessage').value.trim();
-            if (!m || !currentPrivateKey) { alert('Scrie un mesaj.'); return; }
+            if (!m) { 
+                alert('✏️ Te rugăm să scrii un mesaj înainte de a trimite.'); 
+                return; 
+            }
+            if (!currentPrivateKey) { 
+                alert('🔑 Nu ești conectat la niciun spațiu privat. Introdu cheia mai întâi.'); 
+                return; 
+            }
             var btn = document.getElementById('submitPrivateMessage');
-            btn.disabled = true; btn.textContent = 'Se trimite...';
-            await db.collection('private_messages').add({ key: currentPrivateKey, name: n || 'Anonim', text: m, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-            document.getElementById('privateName').value = '';
-            document.getElementById('privateMessage').value = '';
-            btn.disabled = false; btn.textContent = 'Trimite mesaj privat';
+            var originalText = btn.textContent;
+            btn.disabled = true; 
+            btn.textContent = '📤 Se trimite...';
+            
+            try {
+                await db.collection('private_messages').add({ 
+                    key: currentPrivateKey, 
+                    name: n || 'Anonim', 
+                    text: m, 
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp() 
+                });
+                document.getElementById('privateMessage').value = '';
+            } catch (error) {
+                console.error('Eroare:', error);
+                alert('❌ Eroare la trimiterea mesajului.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
         };
 
         document.getElementById('candleBtn').onclick = incrementCandle;
