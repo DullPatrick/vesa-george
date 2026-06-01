@@ -179,73 +179,51 @@
 
     // ── CONSTANTE ─────────────────────────────────────────────────────
     const IMGBB_API_KEY = "e8ade6910dc9f1e6fa80d5c21f5d098a";
-    const photoNumbers = [1, 2, 3, 4, 5];
-    const staticPhotos = [];
-    for (let i of photoNumbers) {
-        staticPhotos.push('images/' + i + '.jpg');
-        staticPhotos.push('images/' + i + '.JPG');
-    }
 
-    // Videoclipuri statice (dacă există în folderul local)
-    const staticVideos = ["videos/10.mp4", "videos/2.mp4", "videos/10.MP4", "videos/2.MP4"];
-
-    // ── GALERIE FOTO ──────────────────────────────────────────────────
+    // ── GALERIE FOTO (doar din Firestore, fără statice) ───────────────
     function renderPhotoGallery(firestoreImages) {
         const grid = document.getElementById('photoGrid');
         grid.innerHTML = '';
-        const allPhotos = [
-            ...firestoreImages.map(function(img) { return { url: img.url, originalName: img.originalName, fromFirestore: true }; }),
-            ...staticPhotos.map(function(src) { return { url: src, originalName: 'Amintire' }; })
-        ];
-        const seen = new Set();
-        const unique = [];
-        for (let p of allPhotos) {
-            if (!seen.has(p.url)) { seen.add(p.url); unique.push(p); }
+        
+        if (!firestoreImages || firestoreImages.length === 0) {
+            grid.innerHTML = '<p>Nu există fotografii momentan. Încarcă prima poză!</p>';
+            return;
         }
-        unique.forEach(function(item) {
+        
+        firestoreImages.forEach(function(item) {
             const div = document.createElement('div');
             div.className = 'gallery-item';
             const img = document.createElement('img');
             img.src = item.url;
-            img.onerror = function() { this.parentElement.style.display = 'none'; };
             img.alt = "Foto";
             img.loading = "lazy";
             div.appendChild(img);
-            const caption = item.fromFirestore ? ('Încărcată de vizitator: ' + item.originalName) : 'Amintire din album';
+            const caption = 'Încărcată de vizitator: ' + item.originalName;
             div.onclick = function() { openMedia({ type: 'image', src: item.url, caption: caption }); };
             grid.appendChild(div);
         });
-        if (grid.children.length === 0) grid.innerHTML = '<p>Nu există fotografii momentan.</p>';
     }
 
-    // ── GALERIE VIDEO (LIVE din Firestore) ────────────────────────────
+    // ── GALERIE VIDEO (doar din Firestore, fără statice) ──────────────
     async function renderVideoGallery() {
         const grid = document.getElementById('videoGrid');
         grid.innerHTML = '<div class="loader"><i class="fas fa-spinner fa-pulse"></i> Se încarcă videoclipurile...</div>';
         
         try {
-            // Ia videoclipurile încărcate de vizitatori din Firestore
             const snap = await db.collection('uploaded_videos').orderBy('timestamp', 'desc').get();
-            const userVideos = snap.docs.map(doc => ({ 
+            const videos = snap.docs.map(doc => ({ 
                 id: doc.id, 
                 url: doc.data().url, 
-                originalName: doc.data().originalName,
-                fromUser: true 
+                originalName: doc.data().originalName
             }));
             
-            // Videoclipuri statice (locale)
-            const uniqueStaticVideos = [...new Set(staticVideos)];
-            const staticVideosList = uniqueStaticVideos.map(src => ({ url: src, originalName: 'Arhivă', isStatic: true }));
-            
-            const allVideos = [...userVideos, ...staticVideosList];
-            
             grid.innerHTML = '';
-            if (allVideos.length === 0) {
+            if (videos.length === 0) {
                 grid.innerHTML = '<p>📹 Nu există videoclipuri momentan. Încarcă un videoclip mai sus!</p>';
                 return;
             }
             
-            allVideos.forEach(video => {
+            videos.forEach(video => {
                 const div = document.createElement('div');
                 div.className = 'gallery-item';
                 
@@ -264,13 +242,8 @@
                 div.appendChild(videoElem);
                 div.appendChild(indicator);
                 
-                const caption = video.isStatic ? `Videoclip arhivă` : `📹 Încărcat de vizitator: ${video.originalName}`;
+                const caption = `📹 Încărcat de vizitator: ${video.originalName}`;
                 div.onclick = () => openMedia({ type: 'video', src: video.url, caption: caption });
-                
-                // Dacă videoclipul e static și nu există, ascunde eroarea
-                if (video.isStatic) {
-                    videoElem.onerror = function() { div.style.display = 'none'; };
-                }
                 
                 grid.appendChild(div);
             });
