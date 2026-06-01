@@ -77,11 +77,11 @@
         <h2><i class="fas fa-upload"></i> Adaugă o fotografie sau videoclip</h2>
         <div class="upload-area">
             <div class="upload-form">
-                <input type="file" id="uploadFileInput" accept="image/jpeg,image/jpg,image/png,video/mp4">
+                <input type="file" id="uploadFileInput" accept="image/jpeg,image/jpg,image/png,video/mp4,video/quicktime">
                 <button id="uploadBtn"><i class="fas fa-cloud-upload-alt"></i> Încarcă</button>
             </div>
             <div id="uploadProgressMsg" class="upload-progress"></div>
-            <p style="font-size:0.8rem; margin-top:8px;">📸 Imagini JPG/PNG (max 20MB) sau 🎬 Videoclipuri MP4 (max 100MB). <span class="badge-new">Vizibil live pentru toți</span></p>
+            <p style="font-size:0.8rem; margin-top:8px;">📸 Imagini JPG/PNG sau 🎬 Videoclipuri MP4 (max 100MB). <span class="badge-new">Vizibil live pentru toți</span></p>
         </div>
     </section>
 
@@ -163,7 +163,6 @@
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 
 <script>
     // ── FIREBASE INIT ─────────────────────────────────────────────────
@@ -177,7 +176,6 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    const storage = firebase.storage();
 
     // ── CONSTANTE ─────────────────────────────────────────────────────
     const IMGBB_API_KEY = "e8ade6910dc9f1e6fa80d5c21f5d098a";
@@ -187,6 +185,9 @@
         staticPhotos.push('images/' + i + '.jpg');
         staticPhotos.push('images/' + i + '.JPG');
     }
+
+    // Videoclipuri statice (dacă există în folderul local)
+    const staticVideos = ["videos/10.mp4", "videos/2.mp4", "videos/10.MP4", "videos/2.MP4"];
 
     // ── GALERIE FOTO ──────────────────────────────────────────────────
     function renderPhotoGallery(firestoreImages) {
@@ -217,7 +218,7 @@
         if (grid.children.length === 0) grid.innerHTML = '<p>Nu există fotografii momentan.</p>';
     }
 
-    // ── GALERIE VIDEO (LIVE din Firebase Storage) ─────────────────────
+    // ── GALERIE VIDEO (LIVE din Firestore) ────────────────────────────
     async function renderVideoGallery() {
         const grid = document.getElementById('videoGrid');
         grid.innerHTML = '<div class="loader"><i class="fas fa-spinner fa-pulse"></i> Se încarcă videoclipurile...</div>';
@@ -232,19 +233,11 @@
                 fromUser: true 
             }));
             
-            // Încarcă videoclipurile tale statice din Storage (dacă există)
-            const staticVideos = [];
-            const staticNames = ['10.mp4', '2.mp4'];
-            for (const name of staticNames) {
-                try {
-                    const url = await storage.ref(`videos/${name}`).getDownloadURL();
-                    staticVideos.push({ url: url, originalName: name, isStatic: true });
-                } catch(e) {
-                    console.log(`Video static ${name} nu există în Storage`);
-                }
-            }
+            // Videoclipuri statice (locale)
+            const uniqueStaticVideos = [...new Set(staticVideos)];
+            const staticVideosList = uniqueStaticVideos.map(src => ({ url: src, originalName: 'Arhivă', isStatic: true }));
             
-            const allVideos = [...userVideos, ...staticVideos];
+            const allVideos = [...userVideos, ...staticVideosList];
             
             grid.innerHTML = '';
             if (allVideos.length === 0) {
@@ -273,6 +266,11 @@
                 
                 const caption = video.isStatic ? `Videoclip arhivă` : `📹 Încărcat de vizitator: ${video.originalName}`;
                 div.onclick = () => openMedia({ type: 'video', src: video.url, caption: caption });
+                
+                // Dacă videoclipul e static și nu există, ascunde eroarea
+                if (video.isStatic) {
+                    videoElem.onerror = function() { div.style.display = 'none'; };
+                }
                 
                 grid.appendChild(div);
             });
@@ -310,8 +308,8 @@
         content.innerHTML = '';
     }
 
-    // ── UPLOAD FOTO ȘI VIDEO ──────────────────────────────────────────
-    async function uploadImageToImgBB(file) {
+    // ── UPLOAD FOTO ȘI VIDEO (totul prin ImgBB) ───────────────────────
+    async function uploadToImgBB(file) {
         const formData = new FormData();
         formData.append('key', IMGBB_API_KEY);
         formData.append('image', file);
@@ -319,15 +317,6 @@
         const result = await response.json();
         if (!result.success) throw new Error(result.error && result.error.message ? result.error.message : 'Eroare necunoscută');
         return result.data.url;
-    }
-
-    async function uploadVideoToFirebase(file) {
-        const timestamp = Date.now();
-        const safeName = `${timestamp}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-        const storageRef = storage.ref(`user_videos/${safeName}`);
-        const uploadTask = await storageRef.put(file);
-        const downloadURL = await uploadTask.ref.getDownloadURL();
-        return { url: downloadURL, path: `user_videos/${safeName}` };
     }
 
     async function uploadFile(file) {
@@ -343,13 +332,8 @@
             return;
         }
         
-        if (isImage && file.size > 20 * 1024 * 1024) {
-            progressDiv.innerHTML = '❌ Imaginea este prea mare (maxim 20MB).';
-            setTimeout(() => progressDiv.innerHTML = '', 3000);
-            return;
-        }
-        if (isVideo && file.size > 100 * 1024 * 1024) {
-            progressDiv.innerHTML = '❌ Videoclipul este prea mare (maxim 100MB).';
+        if (file.size > 100 * 1024 * 1024) {
+            progressDiv.innerHTML = '❌ Fișierul este prea mare (maxim 100MB).';
             setTimeout(() => progressDiv.innerHTML = '', 3000);
             return;
         }
@@ -358,8 +342,9 @@
         uploadBtn.disabled = true;
         
         try {
+            const publicUrl = await uploadToImgBB(file);
+            
             if (isImage) {
-                const publicUrl = await uploadImageToImgBB(file);
                 await db.collection('uploaded_images').add({
                     url: publicUrl,
                     originalName: file.name,
@@ -367,9 +352,8 @@
                 });
                 progressDiv.innerHTML = '✅ Poza adăugată! Toți vizitatorii o pot vedea acum.';
             } else {
-                const result = await uploadVideoToFirebase(file);
                 await db.collection('uploaded_videos').add({
-                    url: result.url,
+                    url: publicUrl,
                     originalName: file.name,
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
