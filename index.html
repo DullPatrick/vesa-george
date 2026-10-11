@@ -6,8 +6,6 @@
     <title>În amintirea lui Vesa George-Catalin</title>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background: #fef9f0; color: #2e2e2e; font-family: 'Open Sans', sans-serif; line-height: 1.6; }
@@ -38,7 +36,9 @@
         .timeline::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #d9c7b2; }
         .timeline-item { margin-bottom: 1.8rem; }
         .timeline-item .year { background: #fef3e8; display: inline-block; padding: 0.2rem 1rem; border-radius: 30px; color: #b47c4a; font-weight: bold; }
-        #map { height: 350px; border-radius: 20px; }
+        .places-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; margin-top: 1rem; }
+        .place-card { background: #fffbf5; padding: 1.2rem 1.5rem; border-radius: 20px; border-left: 5px solid #dbbd9b; box-shadow: 0 2px 8px rgba(0,0,0,0.04); font-size: 1.05rem; color: #4a3728; display: flex; align-items: center; gap: 0.7rem; }
+        .place-card i { color: #b47c4a; font-size: 1.2rem; }
         .quote-block { text-align: center; font-style: italic; background: #fef3e8; padding: 2rem; border-radius: 40px; }
         .guestbook-form { display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 2rem; }
         .guestbook-form input, .guestbook-form textarea { padding: 12px; border-radius: 40px; border: 1px solid #e2cfbc; font-family: inherit; }
@@ -101,10 +101,9 @@
         <div class="timeline" id="timelineContainer"></div>
     </section>
 
-    <section id="mapSection">
+    <section id="placesSection">
         <h2><i class="fas fa-map-marker-alt"></i> Locuri dragi</h2>
-        <div id="map"></div>
-        <p style="margin-top: 0.8rem; font-size: 0.85rem;">🔍 Apasă pe fiecare punct pentru a vedea numele locului.</p>
+        <div class="places-list" id="placesList"></div>
     </section>
 
     <section>
@@ -181,9 +180,9 @@
     // Videoclipuri statice (adică tu le adaugi manual în folderul videos/)
     const STATIC_VIDEOS = [
         { url: "videos/1.MP4", name: "Amintire 1" },
-         { url: "videos/12.mp4", name: "Amintire 2" },
-         { url: "videos/2.MOV", name: "Amintire 3" },
-         { url: "videos/8.mp4", name: "Amintire 4" }
+        { url: "videos/12.mp4", name: "Amintire 2" },
+        { url: "videos/2.MOV", name: "Amintire 3" },
+        { url: "videos/8.mp4", name: "Amintire 4" }
     ];
 
     // ========== GALERIE FOTO (LIVE) ==========
@@ -227,7 +226,6 @@
             videoElem.playsInline = true;
             videoElem.style.cssText = 'width:100%;aspect-ratio:1/1;object-fit:cover;';
             videoElem.addEventListener('loadedmetadata', function() { this.currentTime = 0.1; });
-            // Dacă videoclipul nu există, ascunde elementul
             videoElem.onerror = function() { div.style.display = 'none'; };
             const indicator = document.createElement('div');
             indicator.className = 'video-indicator';
@@ -417,6 +415,28 @@
         });
     }
 
+    // ========== LOCURI DRAGI (fără hartă) ==========
+    function buildPlacesList() {
+        const places = [
+            "Cabana Gabriela (Arieșeni)",
+            "Rodica (Arieșeni)",
+            "Chesa",
+            "Cociuba Mare",
+            "Oradea Centru",
+            "Camin c1 (Oradea)",
+            "North Dakota, SUA",
+            "Eforie Nord (litoral)"
+        ];
+        const container = document.getElementById('placesList');
+        container.innerHTML = '';
+        places.forEach(function(place) {
+            const div = document.createElement('div');
+            div.className = 'place-card';
+            div.innerHTML = '<i class="fas fa-map-pin"></i> ' + place;
+            container.appendChild(div);
+        });
+    }
+
     // ========== CITATE ==========
     const quotesList = [
         "„Ceea ce rămâne după noi nu este ceea ce am adunat, ci ceea ce am dăruit.”",
@@ -427,27 +447,6 @@
     let quoteIdx = 0;
     function rotateQuote() { document.getElementById('quoteDisplay').innerText = quotesList[quoteIdx]; quoteIdx = (quoteIdx + 1) % quotesList.length; }
 
-    // ========== HARTĂ ==========
-    function initMap() {
-        var myMap = L.map('map').setView([46.0, 25.0], 7);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> & CartoDB'
-        }).addTo(myMap);
-        var places = [
-            { name: "Cabana Gabriela (Arieșeni)", lat: 46.476, lng: 22.761 },
-            { name: "Rodica (Arieșeni)", lat: 46.477, lng: 22.762 },
-            { name: "Chesa", lat: 46.500, lng: 22.350 },
-            { name: "Cociuba Mare", lat: 46.550, lng: 22.450 },
-            { name: "Oradea Centru", lat: 47.073, lng: 21.922 },
-            { name: "Camin c1 (Oradea)", lat: 47.065, lng: 21.918 },
-            { name: "North Dakota, SUA", lat: 46.808, lng: -100.783 },
-            { name: "Eforie Nord (litoral)", lat: 44.058, lng: 28.653 }
-        ];
-        places.forEach(function(place) {
-            L.marker([place.lat, place.lng]).addTo(myMap).bindPopup('<b>' + place.name + '</b>');
-        });
-    }
-
     // ========== UTILITAR ==========
     function escapeHtml(s) {
         if (!s) return '';
@@ -457,7 +456,7 @@
     // ========== INITIALIZARE ==========
     document.addEventListener('DOMContentLoaded', function() {
         buildTimeline();
-        initMap();
+        buildPlacesList();
         renderVideoGallery();
         rotateQuote();
         setInterval(rotateQuote, 8000);
